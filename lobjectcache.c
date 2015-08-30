@@ -1,6 +1,5 @@
 #include <stdlib.h>
 #include <stdio.h>
-#include <time.h>
 
 #include "llog.h"
 #include "ltypes.h"
@@ -31,37 +30,52 @@ typedef struct _LCache* LCacheP;
 
 static LCache *_cache_instance = NULL;
 
-LCache * l_cache_instance (void) {
-	if (NULL == _cache_instance) {
-		_cache_instance = l_calloc (sizeof (LCache), 1);
-		if (!_cache_instance)
-			return NULL;
+/**
+ * Creates a new LHash object with integers for keys and values.
+ *
+ * @see l_hash_new_full()
+ *
+ * @returns a new LHash object.
+ */
 
-		_cache_instance->storage = l_hash_new();
-		if (!_cache_instance->storage) {
-			l_free (_cache_instance);
-			return NULL;
-		}
-		_cache_instance->object_ttl = 1000;
+LCache * l_cache_new (time_t ttl, time_t cleanup) {
+	LCacheP cache = l_calloc (sizeof (LCache), 1);
+	if (!cache)
+		return NULL;
 
-		/* cleanup_delay
-	    if (ttl > 0 && cleanupDelay > 0) {
-	        Thread t = new Thread(new Runnable() {
-	            public void run() {
-	                while (true) {
-	                    try {
-	                        Thread.sleep(TimeUnit.MILLISECONDS.convert(cleanupDelay, TimeUnit.SECONDS));
-	                    } 
-	                    catch (InterruptedException ex) {
-	                    }
-	                    cleanup();
+	cache->storage = l_hash_new();
+	if (!cache->storage) {
+		l_free (cache);
+		return NULL;
+	}
+	cache->object_ttl = ttl;
+	cache->cleanup_delay = cleanup;
+	/* cleanup_delay
+	if (ttl > 0 && cleanupDelay > 0) {
+	    Thread t = new Thread(new Runnable() {
+	        public void run() {
+	            while (true) {
+	                try {
+	                    Thread.sleep(TimeUnit.MILLISECONDS.convert(cleanupDelay, TimeUnit.SECONDS));
+	                } 
+	                catch (InterruptedException ex) {
 	                }
+	                cleanup();
 	            }
-	        });
-	        t.setPriority(Thread.MIN_PRIORITY);
-	        t.setDaemon(true);
-	        t.start();
-	    }*/
+	        }
+	    });
+	    t.setPriority(Thread.MIN_PRIORITY);
+	    t.setDaemon(true);
+	    t.start();
+	}*/ 
+	return cache;
+}
+
+LCache *
+l_get_cache_instance (void)
+{
+	if (NULL == _cache_instance) {
+		_cache_instance = l_cache_new (2000, 5000);
 	}
 	return _cache_instance;
 }
@@ -86,7 +100,7 @@ void
 cleanup()
 {
 	// TODO: critical section: possibly needed to lock if LHash is not thread-safe?
-	LCacheP cache = l_cache_instance();
+	LCacheP cache = l_get_cache_instance();
 	l_hash_foreach(cache->storage, refresh, cache);
 }
 

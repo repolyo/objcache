@@ -4,6 +4,7 @@
 #ifndef __L_OBJCACHE_H__
 #define __L_OBJCACHE_H__
 
+#include <time.h>
 #include <llib/lmacros.h>
 #include <llib/ltypes.h>
 
@@ -24,7 +25,8 @@ typedef struct _LCache LCache;
 
 /* hash methods */
 
-LCache * l_cache_instance (void);
+LCache * l_get_cache_instance (void);
+LCache * l_cache_new (time_t ttl, time_t cleanup);
 
 bool l_put_cache (LCache * cache, lconstpointer key, lpointer value);
 lpointer l_get_cache (LCache * cache, lconstpointer key);
