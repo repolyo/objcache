@@ -15,7 +15,7 @@ L_BEGIN_DECLS
  */
 
 /* Callback Functions */
-typedef lconstpointer (*LCacheObjectCreator) (lpointer arg);
+typedef lpointer (*LCacheObjectCreator) (lconstpointer key);
 
 /* types */
 
@@ -28,7 +28,7 @@ LCache * l_cache_instance (void);
 
 bool l_put_cache (LCache * cache, lconstpointer key, lpointer value);
 lpointer l_get_cache (LCache * cache, lconstpointer key);
-lpointer l_lookup_cache (LCache * cache, lconstpointer key, LCacheObjectCreator creator);
+lpointer l_get_or_create_cache (LCache * cache, lconstpointer key, LCacheObjectCreator creator);
 
 /* helper funcs */
 

@@ -1,5 +1,6 @@
 #include <stdlib.h>
 #include <stdio.h>
+#include <time.h>
 
 #include "llog.h"
 #include "ltypes.h"
@@ -13,9 +14,20 @@
  */
 struct _LCache
 {
-    LCache * storage;        /**< the table of lists in which the keys/values are stored */
-    long object_ttl;   /**< cache elemant time-to-live */
+    LHash * storage;        /**< the table of lists in which the keys/values are stored */
+    time_t object_ttl;   /**< cache elemant time-to-live */
+	time_t cleanup_delay; 
 };
+
+struct _LCacheItem
+{
+	lpointer value;
+	time_t last_accessed;
+};
+
+typedef struct _LCacheItem LCacheItem;
+typedef struct _LCacheItem* LCacheItemP;
+typedef struct _LCache* LCacheP;
 
 static LCache *_cache_instance = NULL;
 
@@ -31,8 +43,62 @@ LCache * l_cache_instance (void) {
 			return NULL;
 		}
 		_cache_instance->object_ttl = 1000;
+
+		/* cleanup_delay
+	    if (ttl > 0 && cleanupDelay > 0) {
+	        Thread t = new Thread(new Runnable() {
+	            public void run() {
+	                while (true) {
+	                    try {
+	                        Thread.sleep(TimeUnit.MILLISECONDS.convert(cleanupDelay, TimeUnit.SECONDS));
+	                    } 
+	                    catch (InterruptedException ex) {
+	                    }
+	                    cleanup();
+	                }
+	            }
+	        });
+	        t.setPriority(Thread.MIN_PRIORITY);
+	        t.setDaemon(true);
+	        t.start();
+	    }*/
 	}
 	return _cache_instance;
+}
+
+static bool
+refresh (lpointer key, lpointer value, lpointer user_data)
+{
+	bool success = true;
+	time_t now = time(NULL);
+	LCacheP cache = (LCacheP)user_data;
+	time_t ttl = cache->object_ttl;
+	LCacheItemP itemP = (LCacheItemP)value;
+	if (itemP != NULL && (now > (ttl + itemP->last_accessed))) {
+		l_hash_remove(cache->storage, key);
+		fprintf(stdout, "%s: deleteKey: %p", __func__, key);
+		//Thread.yield();
+	}
+	return success;
+}
+
+void 
+cleanup()
+{
+	// TODO: critical section: possibly needed to lock if LHash is not thread-safe?
+	LCacheP cache = l_cache_instance();
+	l_hash_foreach(cache->storage, refresh, cache);
+}
+
+static LCacheItemP createItem(lpointer value)
+{
+	LCacheItemP itemP = l_calloc (sizeof (LCacheItem), 1);
+	if (!itemP)
+		return NULL;
+
+	itemP->value = value;
+	itemP->last_accessed = time(NULL);
+	return itemP;
 }
 
 /**
@@ -54,7 +120,12 @@ LCache * l_cache_instance (void) {
 bool
 l_put_cache (LCache * cache, lpointer key, lpointer value)
 {
-	return l_hash_insert(cache->storage, key, value);
+	bool ret = false;
+	LCacheItemP itemP = createItem(value);
+	if (!itemP) {
+		ret = l_hash_insert(cache->storage, key, itemP);
+	}
+	return ret;
 }
  
 /**
@@ -71,8 +142,13 @@ lpointer
 l_get_cache (LCache * cache,
                lconstpointer key)
 {
-    LHash * hash = cache->storage;
-	return l_hash_lookup(hash, key);
+	lpointer value = NULL;
+	LCacheItemP pitem = (LCacheItemP)l_hash_lookup(cache->storage, key);
+	if (NULL != pitem) {
+		pitem->last_accessed = time (NULL);
+		value = pitem->value;
+	}
+	return value;
 }
 
 /**
@@ -86,13 +162,13 @@ l_get_cache (LCache * cache,
  * key was found.
  */
 lpointer
-l_lookup_cache (LCache * cache,
+l_get_or_create_cache (LCache * cache,
                lconstpointer key,
 			   LCacheObjectCreator creator)
 {
 	lpointer value = l_get_cache(cache, key);
 	if (NULL == value) {
-		value = creator((lpointer)key);
+		value = creator(key);
 		l_put_cache(cache, key, value);
 	}
     return value;
